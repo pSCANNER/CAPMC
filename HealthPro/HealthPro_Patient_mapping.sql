@@ -14,23 +14,23 @@
 --HealthPro table
 drop table #HealthPro 
 select [PMI ID] as PMI_ID, [First Name] as First_name, [Last Name] as Last_name, [Date of Birth] as birth_date, email, phone,
-replace(concat ([street Address], ' ', City, ' ', [state], ' ',  zip), ',', '') as [Address],
-iden.master_id 
+replace(concat ([street Address], ' ', City, ' ', [state], ' ',  zip), ',', '') as [Address]
+, [Physical Measurements Location], [Biospecimens Location]
 into #HealthPro
  from pmi.healthpro.workqueue_CAL_PMC_20180319 HealthPro
- left join OMOP_V5_Pcornet_V3.omop5.phi_identifier iden on iden.identifier = HealthPro.[PMI ID] -- to see if mapping already exists
-	and iden.id_type_concept_id = 2000000813	--HealthPro Participant ID
 where [Physical Measurements Location] in ('sdbbgateway', 'sandiegobb', 'uofcsandiego')
-	or [Physical Measurements Location] = ''
+	or ([Physical Measurements Location] = '' and [Biospecimens Location] not in ('uofcirvine', 'usc'))
 	or [Biospecimens Location] in ('sdbbgateway', 'sandiegobb', 'uofcsandiego')
-	or [Biospecimens Location] = ''
+	or ([Biospecimens Location] = '' and [Physical Measurements Location] not in ('uofcirvine', 'usc'))
  -- do not filter on withdrawn status until during/ after OMOP pull.
+
+
  
- 
+ select  [Physical Measurements Location], [Biospecimens Location], COUNT(*) from #healthpro group by  [Physical Measurements Location], [Biospecimens Location]
+
+
 
 ---------------------------------------------------------------------------------
-
-
 
 
 
@@ -75,6 +75,12 @@ full outer join (
 where i.PMI_ID is not null 
 and p.first_name is not null and p.last_name is not null and p.birth_date is not null 
 and p.Mapped_PMI_ID is null --unmapped patients only
+group by i.PMI_ID, p.master_id, i.first_name, i.last_name, p.first_name, p.last_name , 
+i.birth_date, p.birth_date,
+i.phone, p.[HomePhone], p.[WorkPhone], 
+i.email, p.EMAIL_ADDRESS,
+i.[address], p.[address]
+
 
 
 
@@ -83,10 +89,27 @@ update #first_match
 set CountIdentifiersMatched =  (First_name_match + Last_name_match + DOB_match + phone_match + email_match+ address_match)
 
 
+
+
+--Check if 1 healthpro patient is mapped to multiple EHR patient (Manual review and/or phone call verification
+--	 is needed if patient is matched to multiple EHR patients)
+if OBJECT_ID('tempdb.dbo.#manual_match_review') is not null drop table #manual_match_review
+select * 
+into #manual_match_review 
+from #first_match 
+where pmi_id in (
+	select PMI_ID
+	from #first_match 
+	group by PMI_ID 
+	having COUNT(*) >1 
+)
+
+select * from #manual_match_review
+
 ---------------------------------------------------------------------------------
 
 select * from #first_match where CountIdentifiersMatched < 4 
-select COUNT(*) from #first_match where CountIdentifiersMatched >= 4 
+select * from #first_match where CountIdentifiersMatched >= 4 and pmi_id not in (select pmi_id from #manual_match_review)
 
 ---------------------------------------------------------------------------------
 
@@ -97,7 +120,6 @@ declare @system_PMI varchar(100) = 'HealthPro'
 declare @assigner_PMI varchar(100) = 'HealthPro'
 declare @concept_code_PMI varchar(100) = 'AoU'
 declare @EHR_MRN_ID_Use bigint = (select concept_id from OMOP_VOCABULARY.vocab5.CONCEPT where CONCEPT_CODE = 'EHR_MRN_UCSD')  --Change to reflect each site.
-
 
 INSERT OMOP_V5_Pcornet_V3.omop5.phi_identifier (preferred_record, master_id, source_id, id_use_concept_id
 	, id_use_source_value, id_use_source_concept_id,
@@ -123,22 +145,27 @@ left join omop_vocabulary.vocab5.concept id_use on id_use.vocabulary_id = 'CAPMC
 		and id_use.concept_code = @concept_code_PMI and id_use.invalid_reason is NULL
 left join omop_vocabulary.vocab5.concept id_type on id_type.vocabulary_id = 'CAPMC' and id_type.concept_class_id = 'Identifier Type'
 		and id_type.concept_code = 'PMI_ID' and id_type.invalid_reason is NULL
-WHERE NOT EXISTS (SELECT identifier FROM OMOP_V5_Pcornet_V3.omop5.phi_identifier A2 
+left join #manual_match_review mmr on mmr.PMI_ID = FM.PMI_ID 
+WHERE 
+NOT EXISTS (SELECT identifier FROM OMOP_V5_Pcornet_V3.omop5.phi_identifier A2 
 					WHERE A2.identifier = FM.PMI_ID
 					and id_type_concept_id = 2000000813	--HealthPro Participant ID (PMI_ID)
-					)				
+					)			
+and mmr.PMI_ID is null 	--exclude patients in the manual review table
 AND FM.CountIdentifiersMatched >= 4 		
 group by FM.master_id, FM.PMI_ID, person.source_id,id_use.concept_id, id_type.concept_id; 
 
 ---------------------------------------------------------------------------------
 
+insert into #manual_match_review
 select * from #first_match where CountIdentifiersMatched < 4  --Send to Rita for identity verification (via phone call) 
 
 
 ---------------------------------------------------------------------------------
 
 
---Second match: (first or last name) and DOB and (email or phone or street address)
+--Second match: (first or last name) and DOB and (email or phone or street address) 
+-- for patients not matched in the previous step 
 -- Manual review is needed for this section
 if OBJECT_ID('tempdb.dbo.#second_match') is not null drop table #second_match
 select i.PMI_ID, p.master_id, i.first_name, i.last_name, p.first_name as Identity_first_name, p.last_name as Identity_last_name, 
@@ -177,12 +204,16 @@ full outer join (
 	) p
 	on (p.first_name = i.first_name or p.last_name = i.last_name)
 	and p.birth_date = i.birth_date
+left join #manual_match_review mmr on mmr.PMI_ID = i.PMI_ID 
 where i.PMI_ID is not null and i.PMI_ID not in (select PMI_ID from #first_match)
 and (p.first_name is not null or p.last_name is not null) and p.birth_date is not null 
 and p.Mapped_PMI_ID is null --unmapped patients only
+and mmr.PMI_ID is null 	--exclude patients in the manual review table
 group by i.PMI_ID, p.master_id, i.first_name, i.last_name, p.first_name, p.last_name, 
 i.birth_date, p.birth_date, i.phone, p.[HomePhone], p.[WorkPhone], 
 i.email, p.EMAIL_ADDRESS, i.[address], p.[address] ,p.Mapped_PMI_ID 
+order by i.PMI_ID
+
 
 
 -- Manual review is needed before updating identifiers
@@ -191,8 +222,19 @@ update #second_match
 set CountIdentifiersMatched =  (First_name_match + Last_name_match + DOB_match + phone_match + email_match+ address_match)
 
 
-
+insert into #manual_match_review
 select * from #second_match 
 
+----------------------------------------------------------------------------------
 
--- Manual review of the matches
+--Manual matching and phone confirmation 
+select * from #manual_match_review 
+group by pmi_Id, master_id, first_name, last_name, 
+identity_first_name, identity_last_name, birth_date, identity_birth_date,
+phone, Homephone, workphone, email, email_address, address, identity_address,
+first_name_match, last_name_match, DOB_match, phone_match, email_match, address_match,
+CountIdentifiersMatched
+order by PMI_ID 
+----
+
+
