@@ -158,7 +158,7 @@ group by FM.master_id, FM.PMI_ID, person.source_id,id_use.concept_id, id_type.co
 ---------------------------------------------------------------------------------
 
 insert into #manual_match_review
-select * from #first_match where CountIdentifiersMatched < 4  --Send to Rita for identity verification (via phone call) 
+select * from #first_match where CountIdentifiersMatched < 4  
 
 
 ---------------------------------------------------------------------------------
