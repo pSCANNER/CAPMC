@@ -5,7 +5,9 @@
 	--Description: Maps the HealthPro patients to clarity patients
 					using first name, last name, DOB, and (phone 
 					or email or street address)
-	
+					Secondary match table maps patients based on first name 
+					or last name. Manual review is needed before updating 
+					the identifier table
 
 ***********************************************************************/
 
@@ -132,12 +134,12 @@ group by FM.master_id, FM.PMI_ID, person.source_id,id_use.concept_id, id_type.co
 
 select * from #first_match where CountIdentifiersMatched < 4  --Send to Rita for identity verification (via phone call) 
 
-select * from omop5.phi_identifier where id_type_concept_id = 2000000813
 
 ---------------------------------------------------------------------------------
 
 
 --Second match: (first or last name) and DOB and (email or phone or street address)
+-- Manual review is needed for this section
 if OBJECT_ID('tempdb.dbo.#second_match') is not null drop table #second_match
 select i.PMI_ID, p.master_id, i.first_name, i.last_name, p.first_name as Identity_first_name, p.last_name as Identity_last_name, 
 i.birth_date, p.birth_date  as Identity_birth_date,
@@ -183,7 +185,7 @@ i.birth_date, p.birth_date, i.phone, p.[HomePhone], p.[WorkPhone],
 i.email, p.EMAIL_ADDRESS, i.[address], p.[address] ,p.Mapped_PMI_ID 
 
 
-
+-- Manual review is needed before updating identifiers
 --Count #matched identifiers 
 update #second_match 
 set CountIdentifiersMatched =  (First_name_match + Last_name_match + DOB_match + phone_match + email_match+ address_match)
@@ -193,3 +195,4 @@ set CountIdentifiersMatched =  (First_name_match + Last_name_match + DOB_match +
 select * from #second_match 
 
 
+-- Manual review of the matches
