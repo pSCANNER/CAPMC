@@ -12,7 +12,9 @@
 --		Drug_Exposure 
 
 *****************************************************************************/
-
+
+declare @OMOP_PERSON_CONCEPT_TYPE_ID bigint = 2000000812	--OMOP_PERSON_ID 
+declare @PMI_ID_TYPE_CONCEPT_ID bigint = 2000000813 -- PMI_ID
 
 
 --Person table
@@ -36,10 +38,11 @@ select cast(replace(PMI_ID.identifier, 'P', '') as bigint) as [person_id]  --per
       ,[ethnicity_source_concept_id]
        from omop5.person person
        join omop5.phi_identifier omop_id on omop_id.identifier = person.person_id 
-				and omop_id.id_type_concept_id = 2000000812 --OMOP person ID
+				and omop_id.id_type_concept_id = @OMOP_PERSON_CONCEPT_TYPE_ID
 	   join omop5.phi_identifier PMI_ID on PMI_ID.master_id = omop_id.master_id
-				and PMI_ID.id_type_concept_id = 2000000813 --PMI ID
+				and PMI_ID.id_type_concept_id = @PMI_ID_TYPE_CONCEPT_ID
        
+
 
 --Visit occurrence 
 select [visit_occurrence_id]
@@ -61,9 +64,10 @@ select [visit_occurrence_id]
       ,[preceding_visit_occurrence_id]	--A foreign key to the VISIT_OCCURRENCE table of the visit immediately preceding this visit
        from omop5.visit_occurrence visit
        join omop5.phi_identifier omop_id on omop_id.identifier = visit.person_id 
-				and omop_id.id_type_concept_id = 2000000812 --OMOP person ID
+				and omop_id.id_type_concept_id = @OMOP_PERSON_CONCEPT_TYPE_ID
 	   join omop5.phi_identifier PMI_ID on PMI_ID.master_id = omop_id.master_id
-				and PMI_ID.id_type_concept_id = 2000000813 --PMI ID
+				and PMI_ID.id_type_concept_id = @PMI_ID_TYPE_CONCEPT_ID
+
 
 
 
@@ -85,10 +89,12 @@ select [condition_occurrence_id]
       ,[condition_status_concept_id]
         from omop5.condition_occurrence condition
        join omop5.phi_identifier omop_id on omop_id.identifier = condition.person_id 
-				and omop_id.id_type_concept_id = 2000000812 --OMOP person ID
+				and omop_id.id_type_concept_id = @OMOP_PERSON_CONCEPT_TYPE_ID
 	   join omop5.phi_identifier PMI_ID on PMI_ID.master_id = omop_id.master_id
-				and PMI_ID.id_type_concept_id = 2000000813 --PMI ID
+				and PMI_ID.id_type_concept_id = @PMI_ID_TYPE_CONCEPT_ID
     
+
+
 
 -- Procedure Occurrence
 select [procedure_occurrence_id]
@@ -106,11 +112,12 @@ select [procedure_occurrence_id]
       ,[qualifier_source_value]     
         from omop5.procedure_occurrence proced
        join omop5.phi_identifier omop_id on omop_id.identifier = proced.person_id 
-				and omop_id.id_type_concept_id = 2000000812 --OMOP person ID
+				and omop_id.id_type_concept_id = @OMOP_PERSON_CONCEPT_TYPE_ID
 	   join omop5.phi_identifier PMI_ID on PMI_ID.master_id = omop_id.master_id
-				and PMI_ID.id_type_concept_id = 2000000813 --PMI ID
+				and PMI_ID.id_type_concept_id = @PMI_ID_TYPE_CONCEPT_ID
         
-        
+
+      
 -- Measurement 
 select  [measurement_id]
       ,cast(replace(PMI_ID.identifier, 'P', '') as bigint) as [person_id]  --per DRC, Person_id = PMI_ID (remove 'P')
@@ -132,9 +139,10 @@ select  [measurement_id]
       ,[value_source_value]  
         from omop5.measurement measurement
        join omop5.phi_identifier omop_id on omop_id.identifier = measurement.person_id 
-				and omop_id.id_type_concept_id = 2000000812 --OMOP person ID
+				and omop_id.id_type_concept_id = @OMOP_PERSON_CONCEPT_TYPE_ID
 	   join omop5.phi_identifier PMI_ID on PMI_ID.master_id = omop_id.master_id
-				and PMI_ID.id_type_concept_id = 2000000813 --PMI ID
+				and PMI_ID.id_type_concept_id = @PMI_ID_TYPE_CONCEPT_ID
+
 
 
 -- Drug_Exposure
@@ -162,7 +170,7 @@ select [drug_exposure_id]
       ,[dose_unit_source_value]
         from omop5.drug_exposure drug
        join omop5.phi_identifier omop_id on omop_id.identifier = drug.person_id 
-				and omop_id.id_type_concept_id = 2000000812 --OMOP person ID
+				and omop_id.id_type_concept_id = @OMOP_PERSON_CONCEPT_TYPE_ID
 	   join omop5.phi_identifier PMI_ID on PMI_ID.master_id = omop_id.master_id
-				and PMI_ID.id_type_concept_id = 2000000813 --PMI ID
+				and PMI_ID.id_type_concept_id = @PMI_ID_TYPE_CONCEPT_ID
 
